@@ -77,6 +77,7 @@
 
 				<template v-else>
 					<div
+						class="avatar-select-wrapper"
 						@click.stop.exact.prevent="toggleSelected"
 						@click.shift.exact.prevent="onSelectMultiple">
 						<template v-if="hoveringAvatar || selected">
@@ -1786,10 +1787,12 @@ export default {
 	display: flex;
 	align-items: center;
 	justify-content: center;
+}
 
-	:deep(.avatardiv) {
-		display: block;
-	}
+.avatar-select-wrapper {
+	display: flex;
+	align-items: center;
+	justify-content: center;
 }
 
 .check-icon {
