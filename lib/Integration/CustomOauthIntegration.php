@@ -148,7 +148,8 @@ class CustomOauthIntegration {
 	}
 
 	public function finishConnect(Account $account,
-		string $code): Account {
+		string $code,
+		string $codeVerifier = ''): Account {
 		$clientId = $this->appConfig->getValueString(Application::APP_ID, ConfigLexicon::CUSTOM_OAUTH_CLIENT_ID);
 		$encryptedClientSecret = $this->appConfig->getValueString(Application::APP_ID, ConfigLexicon::CUSTOM_OAUTH_CLIENT_SECRET);
 		$tokenEndpoint = $this->getTokenEndpoint();
@@ -158,16 +159,22 @@ class CustomOauthIntegration {
 			return $account;
 		}
 		$clientSecret = $this->crypto->decrypt($encryptedClientSecret);
+		$formParams = [
+			'client_id' => $clientId,
+			'client_secret' => $clientSecret,
+			'grant_type' => 'authorization_code',
+			'redirect_uri' => $this->getRedirectUrl(),
+			'code' => $code,
+		];
+		// PKCE (RFC 7636): only sent when the flow was started with a challenge, so IdPs that don't
+		// use PKCE are unaffected.
+		if ($codeVerifier !== '') {
+			$formParams['code_verifier'] = $codeVerifier;
+		}
 		$httpClient = $this->clientService->newClient();
 		try {
 			$response = $httpClient->post($tokenEndpoint, [
-				'form_params' => [
-					'client_id' => $clientId,
-					'client_secret' => $clientSecret,
-					'grant_type' => 'authorization_code',
-					'redirect_uri' => $this->getRedirectUrl(),
-					'code' => $code,
-				],
+				'form_params' => $formParams,
 			]);
 		} catch (Exception $e) {
 			$this->logger->error('Could not link custom OAuth account: ' . $e->getMessage(), [

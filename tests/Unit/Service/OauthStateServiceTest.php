@@ -113,4 +113,52 @@ class OauthStateServiceTest extends TestCase {
 
 		$this->service->validateAndConsume('42.900.' . bin2hex('hmac-alice'), 'mallory');
 	}
+
+	/** Reversible crypto stand-ins so the encrypt->carry-in-state->decrypt round trip is testable. */
+	private function stubReversibleCrypto(): void {
+		$this->crypto->method('encrypt')->willReturnCallback(static fn (string $v): string => 'enc:' . $v);
+		$this->crypto->method('decrypt')->willReturnCallback(static fn (string $v): string => substr($v, 4));
+		$this->crypto->method('calculateHMAC')->willReturnCallback(static fn (string $v): string => hash('sha256', 'k' . $v, true));
+	}
+
+	public function testPkceStateRoundTripsVerifierAndChallengeMatches(): void {
+		$this->time->method('getTime')->willReturn(1000);
+		$this->stubReversibleCrypto();
+
+		$created = $this->service->createPkceState(42, 'alice');
+		$consumed = $this->service->validateAndConsumePkce($created['state'], 'alice');
+
+		$this->assertEquals(42, $consumed['accountId']);
+		$this->assertEquals(43, strlen($consumed['verifier'])); // RFC 7636 verifier length
+		// The challenge the IdP saw must be the S256 hash of the verifier we get back for the exchange.
+		$expectedChallenge = rtrim(strtr(base64_encode(hash('sha256', $consumed['verifier'], true)), '+/', '-_'), '=');
+		$this->assertEquals($created['challenge'], $expectedChallenge);
+	}
+
+	public function testValidateAndConsumePkceThrowsOnTamperedHmac(): void {
+		$this->time->method('getTime')->willReturn(1000);
+		$this->stubReversibleCrypto();
+		$created = $this->service->createPkceState(42, 'alice');
+
+		$this->expectException(InvalidOauthStateException::class);
+		$this->service->validateAndConsumePkce($created['state'] . 'ff', 'alice');
+	}
+
+	public function testValidateAndConsumePkceThrowsOnUserMismatch(): void {
+		$this->time->method('getTime')->willReturn(1000);
+		$this->stubReversibleCrypto();
+		$created = $this->service->createPkceState(42, 'alice');
+
+		$this->expectException(InvalidOauthStateException::class);
+		$this->service->validateAndConsumePkce($created['state'], 'mallory');
+	}
+
+	public function testValidateAndConsumePkceThrowsOnExpired(): void {
+		$this->time->method('getTime')->willReturnOnConsecutiveCalls(1000, 1000 + OauthStateService::TTL + 1);
+		$this->stubReversibleCrypto();
+		$created = $this->service->createPkceState(42, 'alice');
+
+		$this->expectException(InvalidOauthStateException::class);
+		$this->service->validateAndConsumePkce($created['state'], 'alice');
+	}
 }

@@ -142,13 +142,14 @@ class CustomOauthIntegrationTest extends TestCase {
 			->with('https://idp/token', $this->callback(static function (array $opts): bool {
 				return isset($opts['form_params'])
 					&& $opts['form_params']['grant_type'] === 'authorization_code'
-					&& $opts['form_params']['code'] === 'the-code';
+					&& $opts['form_params']['code'] === 'the-code'
+					&& $opts['form_params']['code_verifier'] === 'the-verifier';
 			}))
 			->willReturn($response);
 		$this->clientService->method('newClient')->willReturn($client);
 
 		$account = $this->account('mail.example.com', 'xoauth2');
-		$this->integration->finishConnect($account, 'the-code');
+		$this->integration->finishConnect($account, 'the-code', 'the-verifier');
 
 		$this->assertSame('enc(RT)', $account->getMailAccount()->getOauthRefreshToken());
 		$this->assertSame('enc(AT)', $account->getMailAccount()->getOauthAccessToken());

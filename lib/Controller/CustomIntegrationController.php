@@ -98,8 +98,8 @@ class CustomIntegrationController extends Controller {
 			);
 		}
 		try {
-			$accountId = $this->oauthStateService->validateAndConsume($state, $this->userId);
-			$account = $this->accountService->find($this->userId, $accountId);
+			$validated = $this->oauthStateService->validateAndConsumePkce($state, $this->userId);
+			$account = $this->accountService->find($this->userId, $validated['accountId']);
 		} catch (InvalidOauthStateException|ClientException $e) {
 			$this->logger->warning('Cannot link custom OAuth account: invalid OAuth state', [
 				'exception' => $e,
@@ -115,6 +115,7 @@ class CustomIntegrationController extends Controller {
 		$updated = $this->customIntegration->finishConnect(
 			$account,
 			$code,
+			$validated['verifier'],
 		);
 		$this->accountService->update($updated->getMailAccount());
 		try {

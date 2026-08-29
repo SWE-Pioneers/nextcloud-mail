@@ -301,7 +301,7 @@ import {
 	queryMx,
 	testConnectivity,
 } from '../service/AutoConfigService.js'
-import { generateOauthState } from '../service/OauthStateService.js'
+import { generateOauthState, generateOauthPkceState } from '../service/OauthStateService.js'
 import useMainStore from '../store/mainStore.js'
 
 export default {
@@ -706,8 +706,10 @@ export default {
 									.replace('_email_', encodeURIComponent(account.emailAddress)))
 							} else {
 								this.feedback = t('mail', 'Account created. Please follow the pop-up instructions to link your account')
+								const { state, codeChallenge } = await generateOauthPkceState(account.id)
 								await getUserConsent(this.customOauth.url
-									.replace('_state_', await generateOauthState(account.id))
+									.replace('_state_', state)
+									.replace('_challenge_', codeChallenge)
 									.replace('_email_', encodeURIComponent(account.emailAddress)))
 							}
 						} catch (e) {
@@ -742,8 +744,10 @@ export default {
 									.replace('_email_', encodeURIComponent(account.emailAddress)))
 							} else {
 								this.feedback = t('mail', 'Account updated. Please follow the pop-up instructions to reconnect your account')
+								const { state, codeChallenge } = await generateOauthPkceState(account.id)
 								await getUserConsent(this.customOauth.url
-									.replace('_state_', await generateOauthState(account.id))
+									.replace('_state_', state)
+									.replace('_challenge_', codeChallenge)
 									.replace('_email_', encodeURIComponent(account.emailAddress)))
 							}
 						} catch (e) {

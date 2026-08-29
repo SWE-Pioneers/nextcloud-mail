@@ -90,11 +90,11 @@ class CustomIntegrationControllerTest extends TestCase {
 	public function testOauthRedirectFinishesConnectAndPersists(): void {
 		$mailAccount = new MailAccount();
 		$account = new Account($mailAccount);
-		$this->oauthStateService->expects($this->once())->method('validateAndConsume')
-			->with('the-state', 'bob')->willReturn(42);
+		$this->oauthStateService->expects($this->once())->method('validateAndConsumePkce')
+			->with('the-state', 'bob')->willReturn(['accountId' => 42, 'verifier' => 'the-verifier']);
 		$this->accountService->expects($this->once())->method('find')->with('bob', 42)->willReturn($account);
 		$this->integration->expects($this->once())->method('finishConnect')
-			->with($account, 'the-code')->willReturn($account);
+			->with($account, 'the-code', 'the-verifier')->willReturn($account);
 		$this->accountService->expects($this->once())->method('update')->with($mailAccount);
 		$this->mailboxSync->expects($this->once())->method('sync');
 

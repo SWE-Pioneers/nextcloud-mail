@@ -313,6 +313,8 @@ class PageController extends Controller {
 						'state' => '_state_', // Replaced by frontend
 						'scope' => $this->appConfig->getValueString(Application::APP_ID, ConfigLexicon::CUSTOM_OAUTH_SCOPES, 'openid email profile'),
 						'access_type' => 'offline',
+						'code_challenge' => '_challenge_', // PKCE (RFC 7636), replaced by frontend
+						'code_challenge_method' => 'S256',
 						'login_hint' => '_email_', // Replaced by frontend
 					]),
 					'imapHost' => $customOauthImapHost,
