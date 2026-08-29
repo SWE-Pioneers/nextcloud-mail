@@ -72,6 +72,23 @@ class CustomOauthIntegrationTest extends TestCase {
 		$this->assertTrue($this->integration->isCustomOauthAccount($this->account('mail.example.com', 'xoauth2')));
 	}
 
+	public function testMatchesRegardlessOfMailboxDomain(): void {
+		// A hosting provider fronts many customer domains (alice@acme.ly, bob@foo.example) behind ONE
+		// shared mail host + one IdP. Matching is by IMAP host, never the email domain, so every such
+		// mailbox is recognised as a custom-OAuth account. This is the multi-tenant-provider model.
+		$this->config([ConfigLexicon::CUSTOM_OAUTH_IMAP_HOST => 'mail.provider.example']);
+		foreach (['alice@acme.ly', 'bob@foo.example', 'c@sub.domain.test'] as $email) {
+			$mailAccount = new MailAccount();
+			$mailAccount->setInboundHost('mail.provider.example');
+			$mailAccount->setAuthMethod('xoauth2');
+			$mailAccount->setEmail($email);
+			$this->assertTrue(
+				$this->integration->isCustomOauthAccount(new Account($mailAccount)),
+				"mailbox $email on the provider host should match",
+			);
+		}
+	}
+
 	public function testDoesNotMatchOtherHost(): void {
 		$this->config([ConfigLexicon::CUSTOM_OAUTH_IMAP_HOST => 'mail.example.com']);
 		$this->assertFalse($this->integration->isCustomOauthAccount($this->account('imap.gmail.com', 'xoauth2')));
