@@ -1,59 +1,127 @@
-# Nextcloud Mail — generic custom OAuth2 provider (upstream) + SWE stack wiring
+# Nextcloud Mail — generic custom OAuth2 (XOAUTH2) provider + SWE stack wiring
 
-**Goal.** A user signs into Nextcloud via portal SSO → their Suite mailbox auto-connects in Mail,
-authenticated by the **portal's OAuth token** (no password; Suite mailboxes are `authsource=generic-oidc`,
-they have no IMAP password). See [[suite-email-oidc-only-login-trap]].
+**Goal.** A user signs into Nextcloud via portal SSO → connects their mailbox in Mail with a single
+**"Sign in with SWE Cloud"** button, authenticated by the **portal's OAuth token** — no password
+(Suite mailboxes are `authsource=generic-oidc`; they have no IMAP password).
 
-**Two layers, deliberately separated:**
-- **Layer 1 (generic, UPSTREAM-first):** add a *config-driven custom OAuth2 provider* to Nextcloud Mail
-  following the existing Google/Microsoft conventions, and contribute it back (nextcloud/mail #12491).
-  Nothing SWE-specific — any Nextcloud Mail + mailcow/Dovecot/Keycloak/etc. adopter benefits.
-- **Layer 2 (our config):** instantiate that generic provider for our portal + wire mailcow Dovecot +
-  provisioning auto-connect. This is the only SWE-specific part.
+Stock Nextcloud Mail hard-codes OAuth2 to **Google and Microsoft only** (nextcloud/mail #12491). This
+fork (`SWE-Pioneers/nextcloud-mail`, branch `swe/sso-xoauth2`) adds a **generic, admin-configured
+custom OAuth2 provider** so any standards-compliant IdP (our portal, Keycloak, Authentik,
+django-oauth-toolkit, …) can authenticate a mailbox via XOAUTH2. Intended for upstream contribution.
 
-## Layer 1 — the abstraction (derived from the code, not invented)
-`lib/Integration/GoogleIntegration.php` and `MicrosoftIntegration.php` are ~identical. They differ ONLY in:
-1. token endpoint URL (`https://oauth2.googleapis.com/token` vs MS),
-2. app-config keys (`GOOGLE_OAUTH_CLIENT_ID/SECRET` vs `MICROSOFT_*` in `ConfigLexicon`),
-3. account match (`getInboundHost() === 'imap.gmail.com' && getAuthMethod() === 'xoauth2'`),
-4. redirect route (`mail.googleIntegration.oauthRedirect`).
-Everything else — `configure/unlink/getClientId`, `finishConnect(code)` (code→token, store
-enc access+refresh+ttl on `MailAccount`), `refresh()` (refresh-token grant), `getRedirectUrl()` — is verbatim.
+---
 
-**Refactor (the contribution):**
-- Extract `lib/Integration/AbstractOauthIntegration.php`: concrete `finishConnect()`, `refresh()`,
-  token storage, `getRedirectUrl()`; abstract hooks `getTokenEndpoint()`, `getAuthorizeEndpoint()`,
-  `getScopes()`, `configPrefix()`, `getRedirectRoute()`, `matchesAccount(Account)`.
-- `GoogleIntegration` / `MicrosoftIntegration` → `extends AbstractOauthIntegration`, override the 4 hooks
-  (proves the base; upstream loves a refactor that removes duplication without behaviour change).
-- New `CustomOauthIntegration`: **N admin-configured providers** (a registry), each with
-  {id, displayName, discoveryUri OR authorize/token endpoints, clientId, clientSecret(enc), scopes,
-  imapHost, smtpHost}. Discovery (`/.well-known/openid-configuration`) auto-fills endpoints. Account
-  match = configured imapHost + `xoauth2`.
-- Controller: generalise `OauthController`/`GoogleIntegrationController` to route by provider id.
-- Admin settings (Vue): "Custom mail OAuth providers" CRUD. Connect screen: a button per configured
-  provider ("Connect via <displayName>"), mirroring the Gmail/Outlook buttons.
-- Tests mirroring `tests/.../GoogleIntegration*`; then open the upstream PR from `swe/sso-xoauth2`.
+## Two layers, deliberately separated
 
-## Layer 2 — SWE stack wiring (after Layer 1 lands, even if upstream review is slow we ship our fork)
-- **mailcow Dovecot**: `oauth2` passdb (`xoauth2`+`oauthbearer`) validating portal tokens via
-  `…/oauth/userinfo/` (or an introspection view added to cloud-portal), map `email` → mailbox. Test on a
-  THROWAWAY Dovecot first — a wrong passdb breaks all mail login.
-- **cloud-portal**: a mail OIDC client whose access token Dovecot accepts (email claim present); confirm
-  scope/audience.
-- **Suite image**: build the fork (`composer install --no-dev` + `npm ci && npm run build`, package as a
-  Nextcloud app) and bundle it in place of stock `mail` — our-fork doctrine, like the Frappe apps.
-- **Provisioning** (`do_nextcloud_suite`): register the custom provider config + auto-provision the
-  user's mail account on first SSO login using the token (extends Nextcloud Mail provisioning).
+- **Layer 1 (generic, upstream-worthy):** the custom OAuth2 provider in the Mail app. Nothing
+  SWE-specific — any Nextcloud Mail + Dovecot/mailcow adopter benefits.
+- **Layer 2 (our config):** instantiate that provider for our portal, wire mailcow's Dovecot to accept
+  the portal's tokens, and configure it per Suite.
 
-## Phases
-0. Layer-1 refactor + CustomOauthIntegration + admin UI + tests → upstream PR (branch `swe/sso-xoauth2`).
-1. mailcow Dovecot XOAUTH2 on a throwaway; prove token IMAP login.
-2. cloud-portal token/introspection + mail client.
-3. Build the fork + bundle into the Suite image.
-4. Provisioning auto-connect; e2e on sanad-suite.
+---
 
-## Status (2026-08-29)
-- Fork: `SWE-Pioneers/nextcloud-mail` (from `nextcloud/mail`, default `main`), plan on `swe/sso-xoauth2`.
-- Feasibility confirmed; abstraction seam identified from the code (above). Implementation NOT started.
-- Also pending (separate): SSO progress indicator (perceived-latency fix; portal measured fast at 0.3s).
+## Design decisions (as they were actually made)
+
+1. **Self-contained, NOT a refactor of Google/Microsoft.** The original plan was to extract an
+   `AbstractOauthIntegration` and make Google/MS extend it. **Rejected by the user:** we can't validate
+   Google/MS without real accounts, so leave them byte-for-byte untouched. `CustomOauthIntegration` is
+   self-contained, mirroring `GoogleIntegration`'s shape and reading its config from `ConfigLexicon`
+   (`custom_oauth_*`). A cleaner upstream contribution too: *add a provider*, don't refactor two.
+2. **Matching is by IMAP host, never email domain.** An account is "custom-OAuth" iff its inbound host
+   equals the configured `custom_oauth_imap_host` **and** auth method is `xoauth2`. This makes the
+   provider **multi-tenant**: a hosting provider fronts many customer domains (`alice@acme.ly`,
+   `bob@foo.example`) behind **one shared mail host** and **one IdP** — the mailbox username is the
+   customer's own-domain address, the host is the provider's. (`isCustomOauthAccount`, test
+   `testMatchesRegardlessOfMailboxDomain`.) The one out-of-fork dependency: Dovecot maps the token to a
+   mailbox by the userinfo `email` claim, so provisioning must keep the portal account email == the
+   mailbox address (it fails **closed** if they diverge).
+3. **A discoverable button on the Auto tab.** The connect button first rendered only in *Manual* mode
+   when the IMAP-host field matched (mirroring Google/MS) — undiscoverable for a config-driven IdP. The
+   Auto tab now shows **"Sign in with {name}"** whenever a custom provider is configured; it forces the
+   account onto the provider host and reuses the xoauth2 submit path (`connectCustomOauth`).
+4. **PKCE (RFC 7636) is mandatory in the flow.** Our portal (and many IdPs) require `code_challenge` on
+   the authorize request. Login worked (it sends PKCE); the mail flow didn't → `invalid_request`. The
+   custom flow now does **S256 PKCE**: a verifier is minted server-side, **encrypted into the existing
+   stateless HMAC state** (no new storage; the plaintext verifier never leaves the server, so a redirect
+   interceptor sees only ciphertext and can't forge a verifier matching the public challenge), the
+   challenge goes in the authorize URL, and the verifier is sent at token exchange. Opt-in per request
+   (`pkce` flag on `/api/oauth/state`) so Google/MS stay unchanged.
+5. **Popup completion must survive a strict-COOP IdP.** The consent popup signalled the opener only via
+   `window.opener.postMessage`. An IdP that serves its authorize page with `Cross-Origin-Opener-Policy:
+   same-origin` (e.g. a Django portal) **severs `window.opener`** on the cross-origin hop, so the signal
+   is lost and the connected account is rolled back. **We do NOT weaken the IdP's COOP** (a control-plane
+   security header should not be relaxed to fix a client bug). Instead the popup also signals over a
+   same-origin **`BroadcastChannel`** (popup + opener are same-origin) which survives the
+   browsing-context-group swap, with a short grace before a closed-looking handle is treated as an abort.
+   Works against any IdP's COOP posture.
+
+---
+
+## Layer 1 — what shipped (files)
+
+**Backend**
+- `lib/Integration/CustomOauthIntegration.php` — config-driven provider: `configure`/`unlink`,
+  `getClientId`/`getImapHost`/endpoints/`getScopes`/`getDisplayName`, `isConfigured`,
+  `isCustomOauthAccount(Account)` (host + xoauth2), `finishConnect($account, $code, $codeVerifier='')`
+  (code→token with optional PKCE verifier; stores encrypted access+refresh+ttl), `refresh()`.
+- `lib/ConfigLexicon.php` — `custom_oauth_{name,client_id,client_secret,authorization_endpoint,
+  token_endpoint,scopes,imap_host}`.
+- `lib/Controller/CustomIntegrationController.php` + routes — `POST/DELETE /api/integration/custom`,
+  `GET /integration/custom-auth` (redirect handler; validates the PKCE state, consumes the verifier,
+  finishes the connect).
+- `lib/Controller/PageController.php` — provides the `custom-oauth` initial state (authorize URL with
+  `_state_`/`_challenge_`/`_email_` placeholders + `code_challenge_method=S256`, imapHost, displayName).
+- `lib/Controller/OauthController.php` — `generateState($accountId, $pkce=false)`; PKCE path returns
+  `{state, codeChallenge}`.
+- `lib/Service/OauthStateService.php` — `createPkceState`/`validateAndConsumePkce` (encrypted verifier
+  carried inside the stateless HMAC state).
+- `lib/Command/ConfigureCustomOauth.php` — `occ mail:custom-oauth:configure` (stores the secret
+  **encrypted** via `configure()`; a plain `config:app:set` would store cleartext and break the exchange).
+
+**Frontend**
+- `src/store/mainStore*.js`, `src/init.js` — `customOauth` state from `loadState('mail','custom-oauth')`.
+- `src/components/AccountForm.vue` — `isCustomOauthAccount`/`useOauth`/`customOauthButtonText`, the
+  Auto-tab button + `connectCustomOauth`, PKCE via `generateOauthPkceState`.
+- `src/service/OauthStateService.js` — `generateOauthPkceState`.
+- `src/service/CustomIntegrationService.js`, `src/components/settings/CustomAdminOauthSettings.vue`,
+  `AdminSettings.vue`/`AdminSettings.php` — admin CRUD for the provider.
+- `src/integration/oauth.js` (`getUserConsent`) + `src/main-oauth-popup.js` — COOP-resilient
+  `BroadcastChannel` signalling.
+
+**Tests** (run via a standalone phpunit harness — the app bootstrap needs a full server):
+`CustomOauthIntegrationTest`, `CustomIntegrationControllerTest`, `OauthStateServiceTest` (incl. the PKCE
+round-trip + tamper/expiry). Pre-upstream-PR TODO: CRLF→LF normalize; run the app's real
+eslint/psalm/jest in CI; open the PR to nextcloud/mail.
+
+---
+
+## Layer 2 — SWE stack wiring (shipped)
+
+- **mailcow Dovecot** — `oauth2` passdb (`xoauth2`+`oauthbearer`) validating the portal's OPAQUE tokens
+  via `https://cloud.swe.com.ly/oauth/userinfo/` (`introspection_mode=auth`, `username_attribute=email`
+  → the `email` claim IS the mailbox). Applied additively (validate-before-reload). Config +
+  proof/apply scripts live in vps-infra `ops/dovecot-oauth2-proof/`.
+- **cloud-portal** — django-oauth-toolkit; the org's Nextcloud OIDC client is reused for BOTH the
+  Nextcloud login (`user_oidc`) and the mail app, carrying the mail redirect URIs. `PKCE_REQUIRED=True`
+  (kept — the fork now does PKCE). COOP stays `same-origin` (kept — the fork is COOP-resilient).
+- **Suite deploy** — build the fork (`composer install --no-dev` + `npm ci && npm run build`, packaged
+  as a Nextcloud app) and drop it in place of stock `mail`. Scripts: vps-infra
+  `ops/nextcloud-mail-build/` (`build-nc-mail.sh`, `deploy-mail-fork.sh`, `migrate-suite-nc32.sh`,
+  `configure-mail-sso.sh`). Bump the app version on each redeploy or NC's `?v=` asset cache-buster stays
+  stale and the browser serves the old bundle.
+
+**Status (2026-08-29): LIVE on `sanad-suite` + `suitedemo` (NC 32).** Button appears, PKCE authorize
+succeeds, token exchange + Dovecot XOAUTH2 verified, popup completes over BroadcastChannel, mailbox
+connects with no password.
+
+---
+
+## Remaining work
+
+- **Consent/identity screen (agreed next):** give Mail its own portal OAuth client with
+  auto-authorization OFF, so the connect popup shows a proper one-time consent — "Nextcloud Mail wants
+  access to your mailbox · signed in as `<email>` · Authorize" — while login stays frictionless on its
+  own client.
+- **Future-suite auto-provisioning (deferred to CI/CD):** provision new suites on our Nextcloud image
+  factory with the fork baked in + `do_nextcloud_suite` auto-config; zero-click mail auto-connect.
+- **Upstream PR** to nextcloud/mail once CRLF/lint/psalm/jest are green.
