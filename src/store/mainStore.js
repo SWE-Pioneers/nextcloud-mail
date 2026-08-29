@@ -93,6 +93,7 @@ export default defineStore('main', {
 			isSnoozeDisabled: false,
 			currentUserPrincipal: undefined,
 			googleOauthUrl: null,
+			customOauth: null,
 			masterPasswordEnabled: false,
 			sieveScript: {},
 			calendars: [],

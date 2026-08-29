@@ -117,6 +117,7 @@ export default function initAfterAppCreation() {
 	const disableSnooze = loadState('mail', 'disable-snooze')
 	const googleOauthUrl = loadState('mail', 'google-oauth-url', null)
 	const microsoftOauthUrl = loadState('mail', 'microsoft-oauth-url', null)
+	const customOauth = loadState('mail', 'custom-oauth', null)
 	const followUpFeatureAvailable = loadState('mail', 'llm_followup_available', false)
 	const contextChatFeatureAvailable = loadState('mail', 'context_chat_available', false)
 
@@ -142,6 +143,7 @@ export default function initAfterAppCreation() {
 	mainStore.setSnoozeDisabledMutation(disableSnooze)
 	mainStore.setGoogleOauthUrlMutation(googleOauthUrl)
 	mainStore.setMicrosoftOauthUrlMutation(microsoftOauthUrl)
+	mainStore.setCustomOauthMutation(customOauth)
 	mainStore.setFollowUpFeatureAvailableMutation(followUpFeatureAvailable)
 	mainStore.setContextChatFeatureAvailableMutation(contextChatFeatureAvailable)
 

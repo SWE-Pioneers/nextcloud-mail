@@ -2338,6 +2338,9 @@ export default function mainStoreActions() {
 		setGoogleOauthUrlMutation(url) {
 			this.googleOauthUrl = url
 		},
+		setCustomOauthMutation(customOauth) {
+			this.customOauth = customOauth
+		},
 		setMasterPasswordEnabledMutation(value) {
 			this.masterPasswordEnabled = value
 		},

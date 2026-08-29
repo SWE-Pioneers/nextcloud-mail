@@ -366,6 +366,7 @@ export default {
 		...mapState(useMainStore, [
 			'googleOauthUrl',
 			'microsoftOauthUrl',
+			'customOauth',
 		]),
 
 		settingsPage() {
@@ -416,14 +417,21 @@ export default {
 				|| this.manualConfig.smtpHost === 'outlook.office365.com'
 		},
 
+		isCustomOauthAccount() {
+			return !!this.customOauth
+				&& this.manualConfig.imapHost === this.customOauth.imapHost
+		},
+
 		hasPasswordAlternatives() {
 			return !!this.googleOauthUrl
 				|| !!this.microsoftOauthUrl
+				|| !!this.customOauth
 		},
 
 		useOauth() {
 			return (this.isGoogleAccount && this.googleOauthUrl)
 				|| (this.isMicrosoftAccount && this.microsoftOauthUrl)
+				|| (this.isCustomOauthAccount && this.customOauth)
 		},
 
 		submitButtonText() {
@@ -433,8 +441,13 @@ export default {
 			if (this.mode === 'manual' && this.useOauth) {
 				if (this.isGoogleAccount) {
 					return this.account ? t('mail', 'Reconnect Google account') : t('mail', 'Sign in with Google')
-				} else {
+				} else if (this.isMicrosoftAccount) {
 					return this.account ? t('mail', 'Reconnect Microsoft account') : t('mail', 'Sign in with Microsoft')
+				} else {
+					const name = this.customOauth?.displayName ?? t('mail', 'Custom')
+					return this.account
+						? t('mail', 'Reconnect {name} account', { name })
+						: t('mail', 'Sign in with {name}', { name })
 				}
 			}
 			return this.account ? t('mail', 'Save') : t('mail', 'Connect')
@@ -649,9 +662,14 @@ export default {
 								await getUserConsent(this.googleOauthUrl
 									.replace('_state_', await generateOauthState(account.id))
 									.replace('_email_', encodeURIComponent(account.emailAddress)))
-							} else {
+							} else if (this.isMicrosoftAccount) {
 								this.feedback = t('mail', 'Account created. Please follow the pop-up instructions to link your Microsoft account')
 								await getUserConsent(this.microsoftOauthUrl
+									.replace('_state_', await generateOauthState(account.id))
+									.replace('_email_', encodeURIComponent(account.emailAddress)))
+							} else {
+								this.feedback = t('mail', 'Account created. Please follow the pop-up instructions to link your account')
+								await getUserConsent(this.customOauth.url
 									.replace('_state_', await generateOauthState(account.id))
 									.replace('_email_', encodeURIComponent(account.emailAddress)))
 							}
@@ -680,9 +698,14 @@ export default {
 								await getUserConsent(this.googleOauthUrl
 									.replace('_state_', await generateOauthState(account.id))
 									.replace('_email_', encodeURIComponent(account.emailAddress)))
-							} else {
+							} else if (this.isMicrosoftAccount) {
 								this.feedback = t('mail', 'Account updated. Please follow the pop-up instructions to reconnect your Microsoft account')
 								await getUserConsent(this.microsoftOauthUrl
+									.replace('_state_', await generateOauthState(account.id))
+									.replace('_email_', encodeURIComponent(account.emailAddress)))
+							} else {
+								this.feedback = t('mail', 'Account updated. Please follow the pop-up instructions to reconnect your account')
+								await getUserConsent(this.customOauth.url
 									.replace('_state_', await generateOauthState(account.id))
 									.replace('_email_', encodeURIComponent(account.emailAddress)))
 							}
