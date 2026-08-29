@@ -21,3 +21,12 @@ new View({}).$mount('#mail-oauth-done')
 if (window.opener) {
 	window.opener.postMessage('DONE')
 }
+// window.opener is severed when the IdP serves its authorize page with COOP: same-origin; a
+// same-origin BroadcastChannel still reaches the opener that started the flow.
+try {
+	const channel = new BroadcastChannel('mail-oauth-consent')
+	channel.postMessage('DONE')
+	channel.close()
+} catch (e) {
+	// BroadcastChannel unsupported; window.opener.postMessage above is the fallback
+}
