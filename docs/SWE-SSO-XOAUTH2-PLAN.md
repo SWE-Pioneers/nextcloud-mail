@@ -1,57 +1,59 @@
-# SWE Mail SSO — Nextcloud Mail ↔ mailcow via the cloud portal (XOAUTH2)
+# Nextcloud Mail — generic custom OAuth2 provider (upstream) + SWE stack wiring
 
-**Goal.** After a user signs into Nextcloud via portal SSO, their mailbox is connected in the Mail app
-automatically, authenticated with the **portal's OAuth token** (no password anywhere). Suite mailboxes
-are `authsource=generic-oidc` (no IMAP password), so token auth is the only correct path.
+**Goal.** A user signs into Nextcloud via portal SSO → their Suite mailbox auto-connects in Mail,
+authenticated by the **portal's OAuth token** (no password; Suite mailboxes are `authsource=generic-oidc`,
+they have no IMAP password). See [[suite-email-oidc-only-login-trap]].
 
-**Why a fork.** Stock Nextcloud Mail hardcodes OAuth2 to Google + Microsoft only; there is no generic
-custom-provider handler (nextcloud/mail #12491, still open early 2026). So we fork
-`nextcloud/mail` → **`SWE-Pioneers/nextcloud-mail`** and add a generic ("swecloud") provider modelled on
-`lib/Integration/GoogleIntegration.php`.
+**Two layers, deliberately separated:**
+- **Layer 1 (generic, UPSTREAM-first):** add a *config-driven custom OAuth2 provider* to Nextcloud Mail
+  following the existing Google/Microsoft conventions, and contribute it back (nextcloud/mail #12491).
+  Nothing SWE-specific — any Nextcloud Mail + mailcow/Dovecot/Keycloak/etc. adopter benefits.
+- **Layer 2 (our config):** instantiate that generic provider for our portal + wire mailcow Dovecot +
+  provisioning auto-connect. This is the only SWE-specific part.
 
-## The two halves (both required)
+## Layer 1 — the abstraction (derived from the code, not invented)
+`lib/Integration/GoogleIntegration.php` and `MicrosoftIntegration.php` are ~identical. They differ ONLY in:
+1. token endpoint URL (`https://oauth2.googleapis.com/token` vs MS),
+2. app-config keys (`GOOGLE_OAUTH_CLIENT_ID/SECRET` vs `MICROSOFT_*` in `ConfigLexicon`),
+3. account match (`getInboundHost() === 'imap.gmail.com' && getAuthMethod() === 'xoauth2'`),
+4. redirect route (`mail.googleIntegration.oauthRedirect`).
+Everything else — `configure/unlink/getClientId`, `finishConnect(code)` (code→token, store
+enc access+refresh+ttl on `MailAccount`), `refresh()` (refresh-token grant), `getRedirectUrl()` — is verbatim.
 
-### A. Backend — mailcow Dovecot accepts portal tokens (config, no fork)
-- Enable Dovecot `oauth2` mechanism (`xoauth2` + `oauthbearer`) via a mailcow override
-  (`data/conf/dovecot/extra.conf` + a `dovecot-oauth2.conf.ext`).
-- Validate the bearer token against the portal: **introspection or userinfo**. DOT exposes
-  `…/oauth/userinfo/`; confirm/enable an **introspection** endpoint (`…/oauth/introspect/`) or use
-  userinfo. Map token → `email` claim → local mailbox. `username_attribute = email`.
-- Milestone A-DONE = `curl`/`imaptest` XOAUTH2 login to Dovecot with a portal access token succeeds.
-  Test off-prod first (a throwaway Dovecot) — a wrong passdb can break ALL mail login.
+**Refactor (the contribution):**
+- Extract `lib/Integration/AbstractOauthIntegration.php`: concrete `finishConnect()`, `refresh()`,
+  token storage, `getRedirectUrl()`; abstract hooks `getTokenEndpoint()`, `getAuthorizeEndpoint()`,
+  `getScopes()`, `configPrefix()`, `getRedirectRoute()`, `matchesAccount(Account)`.
+- `GoogleIntegration` / `MicrosoftIntegration` → `extends AbstractOauthIntegration`, override the 4 hooks
+  (proves the base; upstream loves a refactor that removes duplication without behaviour change).
+- New `CustomOauthIntegration`: **N admin-configured providers** (a registry), each with
+  {id, displayName, discoveryUri OR authorize/token endpoints, clientId, clientSecret(enc), scopes,
+  imapHost, smtpHost}. Discovery (`/.well-known/openid-configuration`) auto-fills endpoints. Account
+  match = configured imapHost + `xoauth2`.
+- Controller: generalise `OauthController`/`GoogleIntegrationController` to route by provider id.
+- Admin settings (Vue): "Custom mail OAuth providers" CRUD. Connect screen: a button per configured
+  provider ("Connect via <displayName>"), mirroring the Gmail/Outlook buttons.
+- Tests mirroring `tests/.../GoogleIntegration*`; then open the upstream PR from `swe/sso-xoauth2`.
 
-### B. Frontend — the SwecloudIntegration in the forked Mail app
-- New `lib/Integration/SwecloudIntegration.php` (clone GoogleIntegration): authorize/token/userinfo =
-  the portal's `…/oauth/{authorize,token,userinfo}/`, scope `openid email profile`, PKCE S256.
-- New `lib/Controller/SwecloudIntegrationController.php` + register in `OauthController` /
-  `OauthTokenRefreshListener` (refresh the IMAP token before expiry).
-- Vue: a "Connect via SWE Cloud" button on the account-connect screen (the screen the user saw).
-- App config for the provider's client_id/secret/discovery, set by provisioning (below).
-
-## Portal (cloud-portal)
-- A `nextcloud-mail` (or reuse `nextcloud`) OIDC client whose token is valid for IMAP. Confirm the
-  access token carries/an introspection returns the `email` claim Dovecot maps on.
-- If introspection is needed and DOT doesn't expose it: add an introspection view (small).
-
-## Build + deploy
-- The forked Mail app builds with `composer install --no-dev` + `npm ci && npm run build`, packaged as
-  a Nextcloud app (`krankerl` or `make appstore`). Pin a fork branch `swe/sso-xoauth2`.
-- Bundle our built Mail app into the **Suite Nextcloud image** (replace the stock `mail` app), the same
-  "build from our fork" doctrine as the Frappe apps. `occ app:enable mail` picks ours.
-
-## Provisioning wiring (do_nextcloud_suite)
-- On suite provision (already wires user_oidc SSO): also set the Mail app's swecloud provider config +
-  a provisioning template so the user's mail account auto-creates on first login using the OAuth token
-  (extends the existing Nextcloud Mail provisioning API).
+## Layer 2 — SWE stack wiring (after Layer 1 lands, even if upstream review is slow we ship our fork)
+- **mailcow Dovecot**: `oauth2` passdb (`xoauth2`+`oauthbearer`) validating portal tokens via
+  `…/oauth/userinfo/` (or an introspection view added to cloud-portal), map `email` → mailbox. Test on a
+  THROWAWAY Dovecot first — a wrong passdb breaks all mail login.
+- **cloud-portal**: a mail OIDC client whose access token Dovecot accepts (email claim present); confirm
+  scope/audience.
+- **Suite image**: build the fork (`composer install --no-dev` + `npm ci && npm run build`, package as a
+  Nextcloud app) and bundle it in place of stock `mail` — our-fork doctrine, like the Frappe apps.
+- **Provisioning** (`do_nextcloud_suite`): register the custom provider config + auto-provision the
+  user's mail account on first SSO login using the token (extends Nextcloud Mail provisioning).
 
 ## Phases
-1. **A (backend):** Dovecot XOAUTH2 on a throwaway, then mailcow override; prove token IMAP login.
-2. **Portal:** token/introspection + client; prove the token Dovecot needs.
-3. **B (fork):** SwecloudIntegration + controller + Vue button; unit-test the provider.
-4. **Build+image:** build the fork, bundle into the Suite Nextcloud image.
-5. **Provisioning:** auto-provision the mail account on SSO; e2e test on sanad-suite.
+0. Layer-1 refactor + CustomOauthIntegration + admin UI + tests → upstream PR (branch `swe/sso-xoauth2`).
+1. mailcow Dovecot XOAUTH2 on a throwaway; prove token IMAP login.
+2. cloud-portal token/introspection + mail client.
+3. Build the fork + bundle into the Suite image.
+4. Provisioning auto-connect; e2e on sanad-suite.
 
 ## Status (2026-08-29)
-- Fork created: `SWE-Pioneers/nextcloud-mail` (from `nextcloud/mail`, default `main`).
-- Feasibility confirmed: Dovecot supports custom-IdP XOAUTH2; Nextcloud Mail needs the fork (this doc).
-- Not started: A–5. Next: Phase A on a throwaway Dovecot (no prod risk) + confirm the portal token shape.
+- Fork: `SWE-Pioneers/nextcloud-mail` (from `nextcloud/mail`, default `main`), plan on `swe/sso-xoauth2`.
+- Feasibility confirmed; abstraction seam identified from the code (above). Implementation NOT started.
+- Also pending (separate): SSO progress indicator (perceived-latency fix; portal measured fast at 0.3s).
