@@ -34,6 +34,13 @@ class ConfigLexicon implements ILexicon {
 	public const MICROSOFT_OAUTH_CLIENT_ID = 'microsoft_oauth_client_id';
 	public const MICROSOFT_OAUTH_CLIENT_SECRET = 'microsoft_oauth_client_secret';
 	public const MICROSOFT_OAUTH_TENANT_ID = 'microsoft_oauth_tenant_id';
+	public const CUSTOM_OAUTH_NAME = 'custom_oauth_name';
+	public const CUSTOM_OAUTH_CLIENT_ID = 'custom_oauth_client_id';
+	public const CUSTOM_OAUTH_CLIENT_SECRET = 'custom_oauth_client_secret';
+	public const CUSTOM_OAUTH_AUTHORIZATION_ENDPOINT = 'custom_oauth_authorization_endpoint';
+	public const CUSTOM_OAUTH_TOKEN_ENDPOINT = 'custom_oauth_token_endpoint';
+	public const CUSTOM_OAUTH_SCOPES = 'custom_oauth_scopes';
+	public const CUSTOM_OAUTH_IMAP_HOST = 'custom_oauth_imap_host';
 	public const ANTISPAM_REPORTING_SPAM = 'antispam_reporting_spam';
 	public const ANTISPAM_REPORTING_HAM = 'antispam_reporting_ham';
 
@@ -102,6 +109,44 @@ class ConfigLexicon implements ILexicon {
 				ValueType::STRING,
 				defaultRaw: 'common',
 				definition: 'Microsoft OAuth tenant ID used to connect Microsoft (Outlook) accounts',
+			),
+			new Entry(
+				self::CUSTOM_OAUTH_NAME,
+				ValueType::STRING,
+				defaultRaw: 'Custom',
+				definition: 'Display name of the generic custom OAuth2 provider (shown on the connect button)',
+			),
+			new Entry(
+				self::CUSTOM_OAUTH_CLIENT_ID,
+				ValueType::STRING,
+				definition: 'OAuth client ID used to connect accounts via the generic custom OAuth2 provider',
+			),
+			new Entry(
+				self::CUSTOM_OAUTH_CLIENT_SECRET,
+				ValueType::STRING,
+				definition: 'OAuth client secret used to connect accounts via the generic custom OAuth2 provider',
+				note: 'Stored encrypted by the app before being written',
+			),
+			new Entry(
+				self::CUSTOM_OAUTH_AUTHORIZATION_ENDPOINT,
+				ValueType::STRING,
+				definition: 'Authorization endpoint of the generic custom OAuth2 provider',
+			),
+			new Entry(
+				self::CUSTOM_OAUTH_TOKEN_ENDPOINT,
+				ValueType::STRING,
+				definition: 'Token endpoint of the generic custom OAuth2 provider',
+			),
+			new Entry(
+				self::CUSTOM_OAUTH_SCOPES,
+				ValueType::STRING,
+				defaultRaw: 'openid email profile',
+				definition: 'Space-separated OAuth scopes requested from the generic custom OAuth2 provider',
+			),
+			new Entry(
+				self::CUSTOM_OAUTH_IMAP_HOST,
+				ValueType::STRING,
+				definition: 'IMAP host that identifies accounts belonging to the generic custom OAuth2 provider',
 			),
 			new Entry(
 				self::ANTISPAM_REPORTING_SPAM,
