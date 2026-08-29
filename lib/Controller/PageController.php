@@ -297,6 +297,30 @@ class PageController extends Controller {
 			);
 		}
 
+		$customOauthClientId = $this->appConfig->getValueString(Application::APP_ID, ConfigLexicon::CUSTOM_OAUTH_CLIENT_ID);
+		$customOauthAuthEndpoint = $this->appConfig->getValueString(Application::APP_ID, ConfigLexicon::CUSTOM_OAUTH_AUTHORIZATION_ENDPOINT);
+		$customOauthImapHost = $this->appConfig->getValueString(Application::APP_ID, ConfigLexicon::CUSTOM_OAUTH_IMAP_HOST);
+		if (!empty($customOauthClientId) && !empty($customOauthAuthEndpoint) && !empty($customOauthImapHost)) {
+			$separator = str_contains($customOauthAuthEndpoint, '?') ? '&' : '?';
+			$customOauthName = $this->appConfig->getValueString(Application::APP_ID, ConfigLexicon::CUSTOM_OAUTH_NAME, 'Custom');
+			$this->initialStateService->provideInitialState(
+				'custom-oauth',
+				[
+					'url' => $customOauthAuthEndpoint . $separator . http_build_query([
+						'client_id' => $customOauthClientId,
+						'redirect_uri' => $this->urlGenerator->linkToRouteAbsolute('mail.customIntegration.oauthRedirect'),
+						'response_type' => 'code',
+						'state' => '_state_', // Replaced by frontend
+						'scope' => $this->appConfig->getValueString(Application::APP_ID, ConfigLexicon::CUSTOM_OAUTH_SCOPES, 'openid email profile'),
+						'access_type' => 'offline',
+						'login_hint' => '_email_', // Replaced by frontend
+					]),
+					'imapHost' => $customOauthImapHost,
+					'displayName' => $customOauthName === '' ? 'Custom' : $customOauthName,
+				],
+			);
+		}
+
 		// Disable snooze and scheduled send in frontend if ajax cron is used because it is unreliable
 		$cronMode = $this->config->getAppValue('core', 'backgroundjobs_mode', 'ajax');
 		$this->initialStateService->provideInitialState(
