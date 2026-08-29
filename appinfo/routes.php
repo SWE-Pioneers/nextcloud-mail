@@ -476,6 +476,21 @@ return [
 			'verb' => 'GET',
 		],
 		[
+			'name' => 'customIntegration#configure',
+			'url' => '/api/integration/custom',
+			'verb' => 'POST',
+		],
+		[
+			'name' => 'customIntegration#unlink',
+			'url' => '/api/integration/custom',
+			'verb' => 'DELETE',
+		],
+		[
+			'name' => 'customIntegration#oauthRedirect',
+			'url' => '/integration/custom-auth',
+			'verb' => 'GET',
+		],
+		[
 			'name' => 'oauth#generateState',
 			'url' => '/api/oauth/state',
 			'verb' => 'POST',
