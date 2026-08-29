@@ -240,10 +240,23 @@
 		</div>
 		<div class="account-form__submit-buttons">
 			<NcButton
+				v-if="mode === 'auto' && customOauth"
+				:aria-label="customOauthButtonText"
+				class="account-form__submit-button"
+				variant="primary"
+				:disabled="loading || !isValidEmail(emailAddress)"
+				@click.prevent="connectCustomOauth">
+				<template #icon>
+					<NcLoadingIcon v-if="loading" :size="20" />
+					<IconCheck v-else :size="20" />
+				</template>
+				{{ customOauthButtonText }}
+			</NcButton>
+			<NcButton
 				v-if="mode === 'auto'"
 				:aria-label="submitButtonText"
 				class="account-form__submit-button"
-				variant="primary"
+				:variant="customOauth ? 'secondary' : 'primary'"
 				type="submit"
 				:disabled="isDisabledAuto || loading"
 				@click.prevent="onSubmit">
@@ -452,9 +465,33 @@ export default {
 			}
 			return this.account ? t('mail', 'Save') : t('mail', 'Connect')
 		},
+
+		customOauthButtonText() {
+			if (this.loading) {
+				return this.loadingMessage ?? t('mail', 'Connecting')
+			}
+			const name = this.customOauth?.displayName ?? t('mail', 'Custom')
+			return t('mail', 'Sign in with {name}', { name })
+		},
 	},
 
 	methods: {
+		// Drive the custom-provider OAuth flow directly from the Auto tab: force the account onto the
+		// configured IMAP host (so the backend matches it to the custom provider) and reuse onSubmit's
+		// xoauth2 branch — no need for the user to discover the Manual tab and type the host.
+		async connectCustomOauth() {
+			if (!this.isValidEmail(this.emailAddress)) {
+				this.feedback = t('mail', 'Please enter an email of the format name@example.com')
+				return
+			}
+			this.manualConfig.imapHost = this.customOauth.imapHost
+			this.manualConfig.imapUser = this.emailAddress
+			this.manualConfig.smtpHost = this.customOauth.imapHost
+			this.manualConfig.smtpUser = this.emailAddress
+			this.mode = 'manual'
+			await this.onSubmit()
+		},
+
 		onModeChanged(e) {
 			this.mode = e.tab.id
 
