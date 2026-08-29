@@ -246,6 +246,26 @@
 			<MicrosoftAdminOauthSettings :tenant-id="microsoftOauthTenantId" :client-id="microsoftOauthClientId" />
 		</div>
 		<div class="app-description">
+			<h3>
+				{{ t('mail', 'Custom OAuth integration') }}
+			</h3>
+			<article>
+				<p>
+					{{ t('mail', 'Connect any standards-compliant OpenID Connect / OAuth2 identity provider (for example a self-hosted Keycloak or a company IdP in front of Dovecot) so users can authenticate their mailbox via XOAUTH2.') }}
+				</p>
+				<p>
+					{{ t('mail', 'Redirect URI') }}: <code>{{ customOauthRedirectUrl }}</code>
+				</p>
+			</article>
+			<CustomAdminOauthSettings
+				:client-id="customOauthClientId"
+				:name="customOauthName"
+				:authorization-endpoint="customOauthAuthorizationEndpoint"
+				:token-endpoint="customOauthTokenEndpoint"
+				:imap-host="customOauthImapHost"
+				:scopes="customOauthScopes" />
+		</div>
+		<div class="app-description">
 			<h3>{{ t('mail', 'User Interface Preference Defaults') }}</h3>
 			<article>
 				<p>
@@ -289,6 +309,7 @@ import NcSettingsSection from '@nextcloud/vue/components/NcSettingsSection'
 import IconSettings from 'vue-material-design-icons/CogOutline.vue'
 import IconAdd from 'vue-material-design-icons/Plus.vue'
 import AntiSpamSettings from './AntiSpamSettings.vue'
+import CustomAdminOauthSettings from './CustomAdminOauthSettings.vue'
 import GmailAdminOauthSettings from './GmailAdminOauthSettings.vue'
 import MicrosoftAdminOauthSettings from './MicrosoftAdminOauthSettings.vue'
 import ProvisioningSettings from './ProvisioningSettings.vue'
@@ -310,10 +331,18 @@ const googleOauthRedirectUrl = loadState('mail', 'google_oauth_redirect_url', nu
 const microsoftOauthTenantId = loadState('mail', 'microsoft_oauth_tenant_id', null) ?? undefined
 const microsoftOauthClientId = loadState('mail', 'microsoft_oauth_client_id', null) ?? undefined
 const microsoftOauthRedirectUrl = loadState('mail', 'microsoft_oauth_redirect_url', null)
+const customOauthClientId = loadState('mail', 'custom_oauth_client_id', null) ?? undefined
+const customOauthRedirectUrl = loadState('mail', 'custom_oauth_redirect_url', null)
+const customOauthName = loadState('mail', 'custom_oauth_name', null) ?? undefined
+const customOauthAuthorizationEndpoint = loadState('mail', 'custom_oauth_authorization_endpoint', null) ?? undefined
+const customOauthTokenEndpoint = loadState('mail', 'custom_oauth_token_endpoint', null) ?? undefined
+const customOauthImapHost = loadState('mail', 'custom_oauth_imap_host', null) ?? undefined
+const customOauthScopes = loadState('mail', 'custom_oauth_scopes', null) ?? undefined
 
 export default {
 	name: 'AdminSettings',
 	components: {
+		CustomAdminOauthSettings,
 		GmailAdminOauthSettings,
 		AntiSpamSettings,
 		MicrosoftAdminOauthSettings,
@@ -343,6 +372,13 @@ export default {
 			microsoftOauthClientId,
 			microsoftOauthDocs: loadState('mail', 'microsoft_oauth_docs'),
 			microsoftOauthRedirectUrl,
+			customOauthClientId,
+			customOauthRedirectUrl,
+			customOauthName,
+			customOauthAuthorizationEndpoint,
+			customOauthTokenEndpoint,
+			customOauthImapHost,
+			customOauthScopes,
 			preview: {
 				provisioningDomain: '',
 				emailTemplate: '',

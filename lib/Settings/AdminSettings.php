@@ -11,6 +11,7 @@ namespace OCA\Mail\Settings;
 
 use OCA\Mail\AppInfo\Application;
 use OCA\Mail\ConfigLexicon;
+use OCA\Mail\Integration\CustomOauthIntegration;
 use OCA\Mail\Integration\GoogleIntegration;
 use OCA\Mail\Integration\MicrosoftIntegration;
 use OCA\Mail\Service\AiIntegrations\AiIntegrationsService;
@@ -32,6 +33,7 @@ class AdminSettings implements ISettings {
 		private AntiSpamService $antiSpamService,
 		private GoogleIntegration $googleIntegration,
 		private MicrosoftIntegration $microsoftIntegration,
+		private CustomOauthIntegration $customIntegration,
 		private IAppConfig $appConfig,
 		private AiIntegrationsService $aiIntegrationsService,
 		private Defaults $themingDefaults,
@@ -106,6 +108,34 @@ class AdminSettings implements ISettings {
 		$this->initialStateService->provideInitialState(
 			'microsoft_oauth_docs',
 			$this->themingDefaults->buildDocLinkToKey('admin-groupware-oauth-microsoft'),
+		);
+		$this->initialStateService->provideInitialState(
+			'custom_oauth_client_id',
+			$this->customIntegration->getClientId(),
+		);
+		$this->initialStateService->provideInitialState(
+			'custom_oauth_redirect_url',
+			$this->customIntegration->getRedirectUrl(),
+		);
+		$this->initialStateService->provideInitialState(
+			'custom_oauth_name',
+			$this->customIntegration->getDisplayName(),
+		);
+		$this->initialStateService->provideInitialState(
+			'custom_oauth_authorization_endpoint',
+			$this->customIntegration->getAuthorizationEndpoint(),
+		);
+		$this->initialStateService->provideInitialState(
+			'custom_oauth_token_endpoint',
+			$this->customIntegration->getTokenEndpoint(),
+		);
+		$this->initialStateService->provideInitialState(
+			'custom_oauth_imap_host',
+			$this->customIntegration->getImapHost(),
+		);
+		$this->initialStateService->provideInitialState(
+			'custom_oauth_scopes',
+			$this->customIntegration->getScopes(),
 		);
 
 		return new TemplateResponse(Application::APP_ID, 'settings-admin');
