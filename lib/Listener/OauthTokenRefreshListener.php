@@ -11,6 +11,7 @@ namespace OCA\Mail\Listener;
 
 use OCA\Mail\Account;
 use OCA\Mail\Events\BeforeImapClientCreated;
+use OCA\Mail\Events\BeforeSmtpClientCreated;
 use OCA\Mail\Integration\CustomOauthIntegration;
 use OCA\Mail\Integration\GoogleIntegration;
 use OCA\Mail\Integration\MicrosoftIntegration;
@@ -21,7 +22,7 @@ use OCP\ICacheFactory;
 use OCP\IMemcache;
 
 /**
- * @template-implements IEventListener<Event|BeforeImapClientCreated>
+ * @template-implements IEventListener<Event|BeforeImapClientCreated|BeforeSmtpClientCreated>
  */
 class OauthTokenRefreshListener implements IEventListener {
 	private const LOCK_TTL = 30;
@@ -37,7 +38,7 @@ class OauthTokenRefreshListener implements IEventListener {
 
 	#[\Override]
 	public function handle(Event $event): void {
-		if (!($event instanceof BeforeImapClientCreated)) {
+		if (!($event instanceof BeforeImapClientCreated) && !($event instanceof BeforeSmtpClientCreated)) {
 			return;
 		}
 		$account = $event->getAccount();

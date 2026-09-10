@@ -12,6 +12,7 @@ namespace OCA\Mail\Tests\Unit\Listener;
 use OCA\Mail\Account;
 use OCA\Mail\Db\MailAccount;
 use OCA\Mail\Events\BeforeImapClientCreated;
+use OCA\Mail\Events\BeforeSmtpClientCreated;
 use OCA\Mail\Integration\CustomOauthIntegration;
 use OCA\Mail\Integration\GoogleIntegration;
 use OCA\Mail\Integration\MicrosoftIntegration;
@@ -75,6 +76,23 @@ class OauthTokenRefreshListenerTest extends TestCase {
 			->with($refreshed->getMailAccount());
 
 		$this->listener->handle(new BeforeImapClientCreated($account));
+	}
+
+	public function testRefreshesCustomOauthAccountBeforeSmtp(): void {
+		$account = $this->account('user@example.com', 1000, 'enc-old');
+		$refreshed = $this->account('user@example.com', 4600, 'enc-new');
+		$this->googleIntegration->method('isGoogleOauthAccount')->willReturn(false);
+		$this->microsoftIntegration->method('isMicrosoftOauthAccount')->willReturn(false);
+		$this->customOauthIntegration->method('isCustomOauthAccount')->willReturn(true);
+		$this->customOauthIntegration->expects($this->once())
+			->method('refresh')
+			->with($account)
+			->willReturn($refreshed);
+		$this->accountService->expects($this->once())
+			->method('update')
+			->with($refreshed->getMailAccount());
+
+		$this->listener->handle(new BeforeSmtpClientCreated($account));
 	}
 
 	public function testRefreshesGoogleAccountWithoutTouchingCustomIntegration(): void {
