@@ -198,6 +198,33 @@ class CustomOauthIntegrationTest extends TestCase {
 		$this->assertSame('enc-RT', $account->getMailAccount()->getOauthRefreshToken()); // unchanged
 	}
 
+	public function testRefreshStoresRotatedRefreshToken(): void {
+		$this->config([
+			ConfigLexicon::CUSTOM_OAUTH_CLIENT_ID => 'cid',
+			ConfigLexicon::CUSTOM_OAUTH_CLIENT_SECRET => 'enc-secret',
+			ConfigLexicon::CUSTOM_OAUTH_TOKEN_ENDPOINT => 'https://idp/token',
+		]);
+		$this->crypto->method('decrypt')->willReturnCallback(static fn (string $v): string => 'dec-' . $v);
+		$this->crypto->method('encrypt')->willReturnCallback(static fn (string $v): string => 'enc(' . $v . ')');
+		$this->timeFactory->method('getTime')->willReturn(1000);
+
+		$response = $this->createMock(IResponse::class);
+		$response->method('getBody')->willReturn(json_encode([
+			'access_token' => 'AT2', 'refresh_token' => 'RT2', 'expires_in' => 3600,
+		], JSON_THROW_ON_ERROR));
+		$client = $this->createMock(IClient::class);
+		$client->method('post')->willReturn($response);
+		$this->clientService->method('newClient')->willReturn($client);
+
+		$account = $this->account('mail.example.com', 'xoauth2');
+		$account->getMailAccount()->setOauthRefreshToken('enc-RT');
+		$account->getMailAccount()->setOauthTokenTtl(1030);
+		$this->integration->refresh($account);
+
+		$this->assertSame('enc(RT2)', $account->getMailAccount()->getOauthRefreshToken());
+		$this->assertSame('enc(AT2)', $account->getMailAccount()->getOauthAccessToken());
+	}
+
 	public function testRefreshSkipsWhenTokenStillValid(): void {
 		$this->timeFactory->method('getTime')->willReturn(1000);
 		$this->clientService->expects($this->never())->method('newClient');

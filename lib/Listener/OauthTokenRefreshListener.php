@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\Mail\Listener;
 
 use OCA\Mail\Events\BeforeImapClientCreated;
+use OCA\Mail\Integration\CustomOauthIntegration;
 use OCA\Mail\Integration\GoogleIntegration;
 use OCA\Mail\Integration\MicrosoftIntegration;
 use OCA\Mail\Service\AccountService;
@@ -23,6 +24,7 @@ class OauthTokenRefreshListener implements IEventListener {
 	public function __construct(
 		private GoogleIntegration $googleIntegration,
 		private MicrosoftIntegration $microsoftIntegration,
+		private CustomOauthIntegration $customOauthIntegration,
 		private AccountService $accountService,
 	) {
 	}
@@ -36,6 +38,8 @@ class OauthTokenRefreshListener implements IEventListener {
 			$updated = $this->googleIntegration->refresh($event->getAccount());
 		} elseif ($this->microsoftIntegration->isMicrosoftOauthAccount($event->getAccount())) {
 			$updated = $this->microsoftIntegration->refresh($event->getAccount());
+		} elseif ($this->customOauthIntegration->isCustomOauthAccount($event->getAccount())) {
+			$updated = $this->customOauthIntegration->refresh($event->getAccount());
 		} else {
 			return;
 		}
