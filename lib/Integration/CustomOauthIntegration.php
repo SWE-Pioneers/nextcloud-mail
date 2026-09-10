@@ -226,14 +226,19 @@ class CustomOauthIntegration {
 				],
 			]);
 		} catch (Exception $e) {
-			$this->logger->warning('Could not refresh custom OAuth token for account {accountId}: ' . $e->getMessage(), [
+			$this->logger->error('Could not refresh custom OAuth token for account {accountId} ({email}): ' . $e->getMessage(), [
 				'exception' => $e,
 				'accountId' => $account->getId(),
+				'email' => $account->getEmail(),
 			]);
 			return $account;
 		}
 
 		$data = json_decode($response->getBody(), true, 512, JSON_THROW_ON_ERROR);
+		// django-oauth-toolkit and other IdPs may rotate the refresh token on use and revoke the old one.
+		if (!empty($data['refresh_token'])) {
+			$account->getMailAccount()->setOauthRefreshToken($this->crypto->encrypt($data['refresh_token']));
+		}
 		$encryptedAccessToken = $this->crypto->encrypt($data['access_token']);
 		$account->getMailAccount()->setOauthAccessToken($encryptedAccessToken);
 		$account->getMailAccount()->setOauthTokenTtl($this->timeFactory->getTime() + $data['expires_in']);

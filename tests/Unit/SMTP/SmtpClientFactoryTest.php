@@ -13,8 +13,10 @@ use ChristophWurst\Nextcloud\Testing\TestCase;
 use Horde_Mail_Transport_Smtphorde;
 use OCA\Mail\Account;
 use OCA\Mail\Db\MailAccount;
+use OCA\Mail\Events\BeforeSmtpClientCreated;
 use OCA\Mail\SMTP\SmtpClientFactory;
 use OCA\Mail\Support\HostNameFactory;
+use OCP\EventDispatcher\IEventDispatcher;
 use OCP\IConfig;
 use OCP\Security\ICrypto;
 use PHPUnit\Framework\MockObject\MockObject;
@@ -29,6 +31,9 @@ class SmtpClientFactoryTest extends TestCase {
 	/** @var HostNameFactory|MockObject */
 	private $hostNameFactory;
 
+	/** @var IEventDispatcher|MockObject */
+	private $eventDispatcher;
+
 	/** @var SmtpClientFactory */
 	private $factory;
 
@@ -38,8 +43,14 @@ class SmtpClientFactoryTest extends TestCase {
 		$this->config = $this->createMock(IConfig::class);
 		$this->crypto = $this->createMock(ICrypto::class);
 		$this->hostNameFactory = $this->createMock(HostNameFactory::class);
+		$this->eventDispatcher = $this->createMock(IEventDispatcher::class);
 
-		$this->factory = new SmtpClientFactory($this->config, $this->crypto, $this->hostNameFactory);
+		$this->factory = new SmtpClientFactory(
+			$this->config,
+			$this->crypto,
+			$this->hostNameFactory,
+			$this->eventDispatcher,
+		);
 	}
 
 	public function testSmtpTransport() {
@@ -91,5 +102,33 @@ class SmtpClientFactoryTest extends TestCase {
 		$this->assertNotNull($transport);
 		$this->assertInstanceOf(Horde_Mail_Transport_Smtphorde::class, $transport);
 		$this->assertEquals($expected, $transport);
+	}
+
+	public function testUsesTheAccessTokenAsRefreshedByTheDispatchedEvent(): void {
+		$mailAccount = new MailAccount([
+			'smtpHost' => 'smtp.domain.tld',
+			'smtpPort' => 25,
+			'smtpSslMode' => 'none',
+			'smtpUser' => 'user@domain.tld',
+		]);
+		$mailAccount->setEmail('user@domain.tld');
+		$mailAccount->setAuthMethod('xoauth2');
+		$mailAccount->setOauthAccessToken('enc-stale');
+		$account = new Account($mailAccount);
+		$this->eventDispatcher->expects($this->once())
+			->method('dispatchTyped')
+			->willReturnCallback(function (BeforeSmtpClientCreated $event) use ($account): void {
+				$this->assertSame($account, $event->getAccount());
+				$event->getAccount()->getMailAccount()->setOauthAccessToken('enc-fresh');
+			});
+		$this->crypto->expects($this->once())
+			->method('decrypt')
+			->with('enc-fresh')
+			->willReturn('fresh-token');
+		$this->hostNameFactory->method('getHostName')->willReturn('cloud.example.com');
+
+		$transport = $this->factory->create($account);
+
+		$this->assertInstanceOf(Horde_Mail_Transport_Smtphorde::class, $transport);
 	}
 }
